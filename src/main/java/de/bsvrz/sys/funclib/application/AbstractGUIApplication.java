@@ -102,11 +102,11 @@ public abstract class AbstractGUIApplication implements GUIApplication {
 		
 		// Komponenten des Dialogs erstellen
 		final JLabel ipLabel = new JLabel("Domainname / IP-Adresse: ");
-		final JComboBox ipComboBox = new JComboBox(ipComboBoxModel);
+		final JComboBox ipComboBox = new MinimumWidthJComboBox(160, ipComboBoxModel);
 		ipComboBox.setEditable(true);
 		
 		final JLabel portLabel = new JLabel("TCP-Portnummer: ");
-		final JComboBox portComboBox = new JComboBox(portComboBoxModel);
+		final JComboBox portComboBox = new MinimumWidthJComboBox(80, portComboBoxModel);
 		portComboBox.setEditable(true);
 		
 		final JLabel userNameLabel = new JLabel("Benutzername: ");
@@ -318,7 +318,27 @@ public abstract class AbstractGUIApplication implements GUIApplication {
 		gbc.insets = new Insets(1, 1, 1, 1);
 		return gbc;
 	}
-	
+
+	private static class MinimumWidthJComboBox<E> extends JComboBox<E> {
+		private final int _minimumWidth;
+
+		public MinimumWidthJComboBox(final int minimumWidth, final ComboBoxModel<E> comboBoxModel) {
+			super(comboBoxModel);
+			_minimumWidth = minimumWidth;
+		}
+
+		@Override
+		public Dimension getPreferredSize() {
+			Dimension preferredSize = super.getPreferredSize();
+			return new Dimension(Math.max(preferredSize.width, _minimumWidth), preferredSize.height);
+		}
+		@Override
+		public Dimension getMinimumSize() {
+			Dimension minimumSize = super.getMinimumSize();
+			return new Dimension(Math.max(minimumSize.width, _minimumWidth), minimumSize.height);
+		}
+	}
+
 	private class IpComboBoxModel extends AbstractListModel implements ComboBoxModel {
 		
 		private final PreferencesModel _preferencesModel;
@@ -340,7 +360,8 @@ public abstract class AbstractGUIApplication implements GUIApplication {
 		
 		public void setSelectedItem(Object anItem) {
 			_preferencesModel.setSelectedIp((String)anItem);
-			_portComboBoxModel.setSelectedItem(_portComboBoxModel.getSelectedItem());
+			fireContentsChanged(this, 0, getSize());
+			_portComboBoxModel.setSelectedItem(_preferencesModel.getSelectedPort());
 		}
 		
 		public Object getSelectedItem() {
@@ -366,7 +387,7 @@ public abstract class AbstractGUIApplication implements GUIApplication {
 		
 		public void setSelectedItem(Object anItem) {
 			_preferencesModel.setSelectedPort((String)anItem);
-			super.fireContentsChanged(anItem, 0, 0);
+			fireContentsChanged(this, 0, getSize());
 		}
 		
 		public Object getSelectedItem() {
@@ -612,14 +633,16 @@ public abstract class AbstractGUIApplication implements GUIApplication {
 					String child = children[i];
 					Preferences childPrefs = _preferencesRoot.node(child);
 					if(childPrefs.get("ip", "").equals(_selectedIp)) {
-						numberOfRelevantPorts++;
+						String port = childPrefs.get("port", null);
+						if(port != null) numberOfRelevantPorts++;
 					}
 				}
 			}
 			catch(BackingStoreException ex) {
 				_debug.warning("Anzahl der Ports, die zur ausgewählten IP-Adresse gehören, konnte nicht ermittelt werden", ex);
 			}
-			return numberOfRelevantPorts;
+			// Wenn noch kein Port mit der ausgewählten IP-Adresse verwendet wurde, dann einen Port (8083 als Default, s.u.) anzeigen
+			return Math.max(1, numberOfRelevantPorts);
 		}
 		
 		/**
@@ -642,6 +665,8 @@ public abstract class AbstractGUIApplication implements GUIApplication {
 						if(port != null) portList.add(port);
 					}
 				}
+				// Wenn noch kein Port mit der ausgewählten IP-Adresse verwendet wurde, dann 8083 als Default anzeigen und auswählen
+				if(portList.isEmpty()) return "8083";
 				return portList.get(index);
 			}
 			catch(BackingStoreException ex) {
